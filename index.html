@@ -630,28 +630,29 @@ gyroBtn.addEventListener('click', enableGyro);
 
 // ---------- Render loop ----------
 function renderLoop() {
+  let finalQuat = new THREE.Quaternion(); // единичный по умолчанию
+
   if (gyroEnabled) {
     computeDeviceQuaternion();
-    const finalQuat = recenterOffset.clone().multiply(deviceQuat);
-    leftCam.quaternion.copy(finalQuat);
-    rightCam.quaternion.copy(finalQuat);
+    finalQuat = recenterOffset.clone().multiply(deviceQuat);
     updateGazeMenu(finalQuat);
-
-    const ipdMeters = ipdMm * 0.001;
-    const halfIpd = ipdMeters / 2;
-    const leftOffset = new THREE.Vector3(-halfIpd, 0, 0).applyQuaternion(finalQuat);
-    leftCam.position.copy(leftOffset);
-    leftCam.quaternion.copy(finalQuat);
-
-    // Правый глаз смещён вправо
-    const rightOffset = new THREE.Vector3(halfIpd, 0, 0).applyQuaternion(finalQuat);
-    rightCam.position.copy(rightOffset);
-    rightCam.quaternion.copy(finalQuat);
   }
+
+  // Применяем IPD и ориентацию всегда
+  const ipdMeters = ipdMm * 0.001;
+  const halfIpd = ipdMeters / 2;
+
+  const leftOffset = new THREE.Vector3(-halfIpd, 0, 0).applyQuaternion(finalQuat);
+  leftCam.position.copy(leftOffset);
+  leftCam.quaternion.copy(finalQuat);
+
+  const rightOffset = new THREE.Vector3(halfIpd, 0, 0).applyQuaternion(finalQuat);
+  rightCam.position.copy(rightOffset);
+  rightCam.quaternion.copy(finalQuat);
+
   rendererL.render(scene, leftCam);
   rendererR.render(scene, rightCam);
 }
-
 // ---------- UI wiring ----------
 fileInput.addEventListener('change', (e) => {
   const file = e.target.files[0];
