@@ -193,6 +193,12 @@
       </label>
 
       <div class="section-title">Экран</div>
+      <label class="opt">Тип поверхности
+        <div class="segmented" id="surfaceSeg">
+          <button data-v="cylinder" class="on">Цилиндр</button>
+          <button data-v="sphere">VR180</button>
+        </div>
+      </label>
       <div class="slider-row">
         <div class="lbl"><span>Изгиб экрана</span><span id="curveVal">100°</span></div>
         <input type="range" id="curve" min="30" max="180" value="100">
@@ -235,6 +241,7 @@ const exitFs = document.getElementById('exitFs');
 const eyeRow = document.getElementById('eyeRow');
 const recenterToast = document.getElementById('recenterToast');
 const formatSeg = document.getElementById('formatSeg');
+const surfaceSeg = document.getElementById('surfaceSeg');
 const app = document.getElementById('app');
 const curveSlider = document.getElementById('curve');
 const fovSlider = document.getElementById('fov');
@@ -251,6 +258,8 @@ video.loop = true;
 let format = 'sbs';
 let curveDeg = 100;
 let fovDeg = 90;
+
+let surfaceType = 'cylinder';
 
 let scene, rendererL, rendererR, leftCam, rightCam, videoTexture;
 let screenLeft, screenRight;
@@ -328,7 +337,7 @@ function buildScreens() {
   else if (format === 'tb') eyeAspect = vw/(vh/2);
   else eyeAspect = vw/vh;
 
-  const radius = 2.2;
+  const radius = surfaceType === 'sphere' ? 3.0 : 2.2; 
   const thetaLength = THREE.MathUtils.degToRad(curveDeg);
   const thetaStart = -Math.PI/2 - thetaLength/2; // centers arc facing -Z (camera forward)
   const arcLength = radius * thetaLength;
@@ -337,23 +346,53 @@ function buildScreens() {
   const uvs = eyeUV();
 
   function makeMesh(uv, layer) {
-    const geo = new THREE.CylinderGeometry(radius, radius, height, 64, 1, true, thetaStart, thetaLength);
+    let geo;
+    if (surfaceType === 'sphere') {
+        geo = new THREE.SphereGeometry(
+            radius,
+            96,
+            64,
+            -Math.PI / 2,
+            Math.PI,
+            0,
+            Math.PI
+        );
+    } else {
+        geo = new THREE.CylinderGeometry(
+            radius,
+            radius,
+            height,
+            64,
+            1,
+            true,
+            thetaStart,
+            thetaLength
+        );
+    }
     const uvAttr = geo.attributes.uv;
     for (let i = 0; i < uvAttr.count; i++) {
-      const u = uvAttr.getX(i);
-      const v = uvAttr.getY(i);
-      uvAttr.setXY(i, uv[0] + u*uv[1], uv[2] + v*uv[3]);
+        const u = uvAttr.getX(i);
+        const v = uvAttr.getY(i);
+        uvAttr.setXY(
+            i,
+            uv[0] + u * uv[1],
+            uv[2] + v * uv[3]
+        );
     }
     uvAttr.needsUpdate = true;
-    const mat = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide, toneMapped: false });
+    const mat = new THREE.MeshBasicMaterial({
+        map: videoTexture,
+        side: THREE.BackSide,
+        toneMapped: false
+    });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.layers.set(layer);
     scene.add(mesh);
     return mesh;
-  }
+}
 
-  screenLeft = makeMesh(uvs[0], LEFT_LAYER);
-  screenRight = makeMesh(uvs[1], RIGHT_LAYER);
+  screenLeft = makeMesh(uvs[1], LEFT_LAYER);
+  screenRight = makeMesh(uvs[0], RIGHT_LAYER);
 }
 
 function resizeOne(rendererX, canvasEl, cam) {
@@ -584,6 +623,16 @@ formatSeg.addEventListener('click', (e) => {
   btn.classList.add('on');
   format = btn.dataset.v;
   if (scene) buildScreens();
+});
+
+surfaceSeg.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    [...surfaceSeg.children].forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    surfaceType = btn.dataset.v;
+    curveSlider.disabled = surfaceType === 'sphere';
+    if (scene) buildScreens();
 });
 
 curveSlider.addEventListener('input', () => {
