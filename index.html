@@ -524,15 +524,15 @@ let yawCorrection = 0;    // радианы, пересчитывается из
 
 function recenter() {
   computeDeviceQuaternion();
-
-  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(deviceQuat);
-  const pitch = Math.asin(THREE.MathUtils.clamp(fwd.y, -1, 1));
-  const yaw = Math.atan2(-fwd.x, -fwd.z);
-
+  // Only cancel the yaw (left/right compass heading), not the full
+  // orientation. Baking in the full quaternion also freezes in pitch/roll,
+  // which get noisy right at beta≈90° - exactly the tilt you get holding
+  // the phone upright facing you in a VR viewer - and that noise is what
+  // was pushing the "centered" view off to one side.
+  yawEuler.setFromQuaternion(deviceQuat, 'YXZ');
   yawCorrection = correctionDegrees * Math.PI / 180;
-  recenterOffset.setFromEuler(new THREE.Euler(-pitch, -(yaw + yawCorrection), 0, 'YXZ'));
+  recenterOffset.setFromAxisAngle(worldY, -(yawEuler.y + yawCorrection));
 }
-
 function showRecenterToast() {
   recenterToast.classList.add('show');
   clearTimeout(showRecenterToast._t);
