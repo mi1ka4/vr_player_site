@@ -38,7 +38,7 @@
   .stage.active{ display:block; }
   .eye-row{ position:absolute; inset:0; display:flex; }
   .eye{ position:relative; width:50%; height:100%; }
-  .eye canvas{ width:100%; height:100%; display:block; touch-action:none; }
+  .eye canvas{ width:100%; height:100%; display:block; touch-action:none; transform-origin:center center; will-change:transform; }
 
   .gaze-menu{
     position:absolute; left:0; right:0; bottom:10%; display:flex; justify-content:center;
@@ -213,8 +213,8 @@
         <input type="range" id="ipd" min="30" max="90" value="64" step="1">
       </div>
       <div class="slider-row">
-        <div class="lbl"><span>Размер экрана</span><span id="scaleVal">1.0×</span></div>
-        <input type="range" id="scale" min="50" max="200" value="100" step="1">
+        <div class="lbl"><span>Масштаб изображения</span><span id="scaleVal">100%</span></div>
+        <input type="range" id="scale" min="40" max="100" value="100" step="1">
       </div>
 
       <div class="controls-bar">
@@ -297,7 +297,13 @@ let curveDeg = 100;
 let fovDeg = 90;
 
 let ipdMm = 64;          // миллиметры
-let screenScale = 1.0;   // множитель размера
+let screenScale = 1.0;   // множитель масштаба картинки на холсте (CSS-трансформация, не 3D)
+
+function applyEyeScale() {
+  const t = `scale(${screenScale})`;
+  canvasL.style.transform = t;
+  canvasR.style.transform = t;
+}
 
 let surfaceType = 'cylinder';
 
@@ -378,7 +384,7 @@ function buildScreens() {
   else eyeAspect = vw/vh;
 
   const baseRadius = surfaceType === 'sphere' ? 3.0 : 2.2;
-  const radius = baseRadius * screenScale;
+  const radius = baseRadius;
   const thetaLength = THREE.MathUtils.degToRad(curveDeg);
   const thetaStart = -Math.PI/2 - thetaLength/2; // centers arc facing -Z (camera forward)
   const arcLength = radius * thetaLength;
@@ -715,8 +721,8 @@ ipdSlider.addEventListener('input', () => {
 
 scaleSlider.addEventListener('input', () => {
   screenScale = parseInt(scaleSlider.value, 10) / 100;
-  scaleVal.textContent = screenScale.toFixed(1) + '×';
-  if (scene) buildScreens(); // перестраиваем геометрию
+  scaleVal.textContent = Math.round(screenScale * 100) + '%';
+  applyEyeScale(); // мгновенно, без пересборки 3D-сцены
 });
 
 function enterPseudoFullscreen() {
