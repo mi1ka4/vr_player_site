@@ -300,9 +300,16 @@ let ipdMm = 64;          // миллиметры
 let screenScale = 1.0;   // множитель масштаба картинки на холсте (CSS-трансформация, не 3D)
 
 function applyEyeScale() {
-  const t = `scale(${screenScale})`;
-  canvasL.style.transform = t;
-  canvasR.style.transform = t;
+  // IPD is handled here too, as a horizontal screen-space shift of each eye's
+  // canvas - NOT a 3D camera position offset. The stereo parallax is already
+  // baked into the source video (left/right halves), so physically moving
+  // the render cameras apart on top of that double-counts parallax and warps
+  // the curved screen asymmetrically. Shifting the flat rendered image left/
+  // right is the correct, standard way to align it with the viewer's actual
+  // eye spacing relative to the headset's fixed lens centers.
+  const shiftPct = (ipdMm - 64) * 0.2;
+  canvasL.style.transform = `scale(${screenScale}) translateX(${-shiftPct}%)`;
+  canvasR.style.transform = `scale(${screenScale}) translateX(${shiftPct}%)`;
 }
 
 let surfaceType = 'cylinder';
@@ -517,15 +524,15 @@ let yawCorrection = 0;    // радианы, пересчитывается из
 
 function recenter() {
   computeDeviceQuaternion();
-  // Only cancel the yaw (left/right compass heading), not the full
-  // orientation. Baking in the full quaternion also freezes in pitch/roll,
-  // which get noisy right at beta≈90° - exactly the tilt you get holding
-  // the phone upright facing you in a VR viewer - and that noise is what
-  // was pushing the "centered" view off to one side.
-  yawEuler.setFromQuaternion(deviceQuat, 'YXZ');
+
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(deviceQuat);
+  const pitch = Math.asin(THREE.MathUtils.clamp(fwd.y, -1, 1));
+  const yaw = Math.atan2(-fwd.x, -fwd.z);
+
   yawCorrection = correctionDegrees * Math.PI / 180;
-  recenterOffset.setFromAxisAngle(worldY, -(yawEuler.y + yawCorrection));
+  recenterOffset.setFromEuler(new THREE.Euler(-pitch, -(yaw + yawCorrection), 0, 'YXZ'));
 }
+
 function showRecenterToast() {
   recenterToast.classList.add('show');
   clearTimeout(showRecenterToast._t);
@@ -644,17 +651,14 @@ function renderLoop() {
     updateGazeMenu(finalQuat);
   }
 
-  // Применяем IPD и ориентацию всегда
-  const ipdMeters = ipdMm * 0.001;
-  const halfIpd = ipdMeters / 2;
-
-  const leftOffset = new THREE.Vector3(-halfIpd, 0, 0).applyQuaternion(finalQuat);
-  leftCam.position.copy(leftOffset);
+  // IPD is applied as a CSS transform on the canvases (see applyEyeScale),
+  // not as a camera position offset - keep both cameras co-located so the
+  // curved screen isn't warped asymmetrically on top of the baked-in parallax.
+  leftCam.position.set(-0.032, 0, 0).applyQuaternion(finalQuat);
   leftCam.quaternion.copy(finalQuat);
 
-  const rightOffset = new THREE.Vector3(halfIpd, 0, 0).applyQuaternion(finalQuat);
-  rightCam.position.copy(rightOffset);
-  rightCam.quaternion.copy(finalQuat);
+  rightCam.position.set(0, 0, 0);
+  rightCam.position.set(0.032, 0, 0).applyQuaternion(finalQuat);
 
   rendererL.render(scene, leftCam);
   rendererR.render(scene, rightCam);
@@ -672,6 +676,7 @@ fileInput.addEventListener('change', (e) => {
     if (!scene) initThree();
     else buildScreens();
     resizeCanvas();
+    applyEyeScale();
   }, { once: true });
 });
 
@@ -716,7 +721,7 @@ playBtn.addEventListener('click', () => {
 ipdSlider.addEventListener('input', () => {
   ipdMm = parseInt(ipdSlider.value, 10);
   ipdVal.textContent = ipdMm + ' мм';
-  // IPD применяется в renderLoop, перестраивать экран не нужно
+  applyEyeScale(); // мгновенный CSS-сдвиг, без пересчёта 3D
 });
 
 scaleSlider.addEventListener('input', () => {
